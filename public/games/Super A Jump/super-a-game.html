@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Super 'a' Jump!</title>
+    <link href="https://fonts.googleapis.com/css2?family=Alata&display=swap" rel="stylesheet">
+    <style>
+        /* EXACT T-REX STYLE LAYOUT */
+        body, html {
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%;
+            overflow: hidden; 
+            font-family: 'Alata', sans-serif;
+            touch-action: none; 
+            background: transparent;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative; 
+            width: 100vw; 
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        canvas { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            z-index: 5; 
+        }
+
+        /* UI OVERLAYS */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(255, 255, 255, 0.4);
+            transition: opacity 0.3s;
+            pointer-events: auto;
+            z-index: 20;
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* TYPOGRAPHY */
+        h1 {
+            font-size: 60px;
+            color: #FF5722;
+            text-shadow: 4px 4px 0 #FFFFFF;
+            margin: 0 0 20px 0;
+            animation: bounce 2s infinite;
+            text-align: center;
+        }
+
+        h2 {
+            font-size: 50px;
+            color: #333;
+            text-shadow: 2px 2px 0 #FFF;
+            margin: 0 0 10px 0;
+        }
+
+        p {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 30px;
+            font-weight: bold;
+        }
+
+        .btn {
+            background: linear-gradient(to bottom, #4CAF50, #45a049);
+            color: white;
+            font-family: 'Alata', sans-serif;
+            font-size: 32px;
+            padding: 15px 50px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #2E7D32, 0 10px 10px rgba(0,0,0,0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .btn:active {
+            transform: translateY(6px);
+            box-shadow: 0 0 0 #2E7D32, inset 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        /* HUD Score */
+        #scoreHud {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 80px;
+            color: white;
+            text-shadow: 4px 4px 0 rgba(0,0,0,0.3);
+            pointer-events: none;
+            display: none;
+            z-index: 10;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="scoreHud">0</div>
+
+    <div id="startScreen" class="screen">
+        <h1>Super /a/ Jump!</h1>
+        <p>Press Spacebar or Click to Fly</p>
+        <button class="btn" onclick="startGame()">PLAY</button>
+    </div>
+
+    <div id="gameOverScreen" class="screen hidden">
+        <h2>Oh No!</h2>
+        <p>Score: <span id="finalScore">0</span> | Best: <span id="bestScore">0</span></p>
+        <button class="btn" onclick="resetGame()">PLAY AGAIN</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const startScreen = document.getElementById('startScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const scoreHud = document.getElementById('scoreHud');
+    const finalScoreEl = document.getElementById('finalScore');
+    const bestScoreEl = document.getElementById('bestScore');
+
+    // --- Audio System ---
+    const sounds = {
+        score: new Audio('a-sound.mp3'),
+        crash: new Audio('ohoh-sound.mp3')
+    };
+
+    for(let key in sounds) {
+        sounds[key].volume = 0.5;
+        sounds[key].preload = 'auto';
+    }
+
+    function playSound(name) {
+        try {
+            sounds[name].currentTime = 0;
+            sounds[name].play().catch(() => {});
+        } catch(e) {}
+    }
+
+    // --- CONFIGURATION ---
+    const CONFIG = {
+        gravity: 1100,
+        jump: -450,
+        speed: 190,
+        groundHeight: 80,
+        spawnRate: 2.4
+    };
+
+    let state = {
+        current: 'START',
+        score: 0,
+        highScore: 0,
+        lastTime: 0,
+        spawnTimer: 0
+    };
+
+    // Safe LocalStorage Access
+    try {
+        state.highScore = localStorage.getItem('super_a_highscore') || 0;
+    } catch(e) {
+        console.log("Local storage disabled");
+    }
+
+    // --- Game Objects ---
+
+    const bird = {
+        x: 100,
+        y: 300,
+        radius: 25,
+        hitbox: 20,
+        velocity: 0,
+        
+        draw: function() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            let rot = Math.min(Math.PI / 3, Math.max(-Math.PI / 3, (this.velocity * 0.002)));
+            ctx.rotate(rot);
+
+            // Shadow
+            ctx.fillStyle = "rgba(0,0,0,0.1)";
+            ctx.font = "bold 60px Alata";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("/a/", 3, 3);
+
+            // Character
+            ctx.fillStyle = "#FF4081";
+            ctx.fillText("/a/", 0, -2); 
+            ctx.restore();
+        },
+        
+        update: function(dt) {
+            this.velocity += CONFIG.gravity * dt;
+            this.y += this.velocity * dt;
+
+            // Ground Collision
+            if (this.y + this.hitbox >= canvas.height - CONFIG.groundHeight) {
+                this.y = canvas.height - CONFIG.groundHeight - this.hitbox;
+                triggerGameOver();
+            }
+
+            // Ceiling Collision
+            if (this.y - this.hitbox <= 0) {
+                this.y = this.hitbox;
+                this.velocity = 0;
+            }
+        },
+        
+        jump: function() {
+            this.velocity = CONFIG.jump;
+        }
+    };
+
+    const pipes = {
+        items: [],
+        w: 80,
+        gap: 180,
+        
+        draw: function() {
+            this.items.forEach(p => {
+                const pipeColor = "#FF9800";
+                const outlineColor = "#F57C00";
+
+                drawRoundedRect(ctx, p.x, 0, this.w, p.top, 0, pipeColor, outlineColor);
+                drawRoundedRect(ctx, p.x - 5, p.top - 30, this.w + 10, 30, 5, pipeColor, outlineColor);
+
+                let botY = p.top + this.gap;
+                let botH = canvas.height - CONFIG.groundHeight - botY;
+                drawRoundedRect(ctx, p.x, botY, this.w, botH, 0, pipeColor, outlineColor);
+                drawRoundedRect(ctx, p.x - 5, botY, this.w + 10, 30, 5, pipeColor, outlineColor);
+            });
+        },
+        
+        update: function(dt) {
+            state.spawnTimer += dt;
+            if (state.spawnTimer >= CONFIG.spawnRate) {
+                state.spawnTimer = 0;
+                
+                const minPipe = 100;
+                const maxPipe = canvas.height - CONFIG.groundHeight - this.gap - 100;
+                const h = Math.floor(Math.random() * (maxPipe - minPipe + 1)) + minPipe;
+                
+                this.items.push({
+                    x: canvas.width, 
+                    top: h,
+                    passed: false
+                });
+            }
+
+            for(let i = 0; i < this.items.length; i++) {
+                let p = this.items[i];
+                p.x -= CONFIG.speed * dt;
+
+                // Collision
+                if (bird.x + bird.hitbox > p.x && bird.x - bird.hitbox < p.x + this.w) {
+                    if (bird.y - bird.hitbox < p.top || bird.y + bird.hitbox > p.top + this.gap) {
+                        triggerGameOver();
+                    }
+                }
+
+                // Score
+                if (p.x + this.w < bird.x && !p.passed) {
+                    state.score++;
+                    scoreHud.innerText = state.score;
+                    p.passed = true;
+                    playSound('score');
+                }
+
+                if (p.x + this.w < -20) {
+                    this.items.shift();
+                    i--;
+                }
+            }
+        }
+    };
+
+    const background = {
+        clouds: [],
+        
+        init: function() {
+            for(let i=0; i<5; i++) {
+                this.clouds.push({
+                    x: Math.random() * 800,
+                    y: Math.random() * 300,
+                    size: 0.5 + Math.random() * 0.5,
+                    speed: 20 + Math.random() * 30
+                });
+            }
+        },
+
+        draw: function() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#87CEEB"; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+            this.clouds.forEach(c => {
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, 40 * c.size, 0, Math.PI*2);
+                ctx.arc(c.x + 30*c.size, c.y - 15*c.size, 45*c.size, 0, Math.PI*2);
+                ctx.arc(c.x + 60*c.size, c.y, 40*c.size, 0, Math.PI*2);
+                ctx.fill();
+            });
+
+            ctx.fillStyle = "#90EE90"; 
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height - CONFIG.groundHeight);
+            
+            const time = Date.now() / 1000; 
+            for (let x = 0; x <= canvas.width; x++) {
+                let y = (canvas.height - CONFIG.groundHeight - 50) + 
+                        Math.sin((x * 0.01) + (time * 2)) * 20;
+                ctx.lineTo(x, y);
+            }
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(0, canvas.height);
+            ctx.fill();
+
+            ctx.fillStyle = "#4CAF50"; 
+            ctx.fillRect(0, canvas.height - CONFIG.groundHeight, canvas.width, CONFIG.groundHeight);
+            
+            ctx.fillStyle = "#66BB6A";
+            ctx.fillRect(0, canvas.height - CONFIG.groundHeight, canvas.width, 15);
+        },
+
+        update: function(dt) {
+            this.clouds.forEach(c => {
+                c.x -= c.speed * dt;
+                if(c.x < -100) c.x = canvas.width + 100;
+            });
+        }
+    };
+
+    function drawRoundedRect(ctx, x, y, w, h, r, fill, stroke) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 3; ctx.stroke(); }
+    }
+
+    // --- GAME CONTROL ---
+
+    function startGame() {
+        bird.y = 300;
+        bird.velocity = 0;
+        pipes.items = [];
+        state.score = 0;
+        state.spawnTimer = 0;
+        state.current = 'PLAYING';
+        state.lastTime = performance.now();
+
+        scoreHud.innerText = "0";
+        scoreHud.style.display = 'block';
+        startScreen.classList.add('hidden');
+        gameOverScreen.classList.add('hidden');
+
+        bird.jump();
+    }
+
+    function triggerGameOver() {
+        if (state.current === 'GAMEOVER') return;
+        state.current = 'GAMEOVER';
+        playSound('crash');
+
+        if (state.score > state.highScore) {
+            state.highScore = state.score;
+            try { localStorage.setItem('super_a_highscore', state.highScore); } catch(e){}
+        }
+
+        finalScoreEl.innerText = state.score;
+        bestScoreEl.innerText = state.highScore;
+        scoreHud.style.display = 'none';
+        
+        setTimeout(() => {
+            gameOverScreen.classList.remove('hidden');
+        }, 300);
+    }
+
+    function resetGame() {
+        startGame();
+    }
+
+    function inputHandler(e) {
+        if (e.type === 'keydown' && e.code === 'Space') e.preventDefault();
+        if (e.type === 'keydown' && e.code !== 'Space') return;
+        
+        if (state.current === 'PLAYING') {
+            bird.jump();
+        } else if (state.current === 'START' && (e.code === 'Space' || e.type === 'mousedown')) {
+            startGame();
+        }
+    }
+
+    function loop(timestamp) {
+        const dt = (timestamp - state.lastTime) / 1000;
+        state.lastTime = timestamp;
+        const safeDt = Math.min(dt, 0.1);
+
+        background.draw();
+        
+        if (state.current === 'PLAYING') {
+            background.update(safeDt);
+            pipes.update(safeDt);
+            pipes.draw();
+            bird.update(safeDt);
+            bird.draw();
+        } else if (state.current === 'START') {
+            background.update(safeDt); 
+        } else if (state.current === 'GAMEOVER') {
+            pipes.draw(); 
+            if (bird.y < canvas.height - CONFIG.groundHeight - bird.hitbox) {
+                bird.y += 500 * safeDt; 
+                bird.draw();
+            } else {
+                bird.y = canvas.height - CONFIG.groundHeight - bird.hitbox;
+                bird.draw();
+            }
+        }
+        requestAnimationFrame(loop);
+    }
+
+    // --- INITIALIZATION ---
+    // Moved to bottom to ensure all objects are defined before use
+    background.init();
+    
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        if(bird.y > canvas.height - CONFIG.groundHeight) {
+            bird.y = canvas.height - CONFIG.groundHeight - bird.radius;
+        }
+    }
+    
+    window.addEventListener('resize', resize);
+    resize(); // Now safe to call because 'bird' is defined above
+
+    window.addEventListener('keydown', inputHandler);
+    window.addEventListener('mousedown', (e) => {
+        if(state.current === 'PLAYING' || state.current === 'START') inputHandler({type: 'mousedown'});
+    });
+    
+    window.addEventListener('touchstart', (e) => {
+        if(state.current === 'PLAYING' || state.current === 'START') {
+            e.preventDefault(); 
+            inputHandler({type: 'mousedown'});
+        }
+    }, {passive: false});
+
+    document.fonts.ready.then(() => {
+        state.lastTime = performance.now();
+        requestAnimationFrame(loop);
+    });
+
+</script>
+</body>
+</html>

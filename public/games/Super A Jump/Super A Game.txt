@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Super 'a' Jump!</title>
+    <!-- Import Alata Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Alata&display=swap" rel="stylesheet">
+    <style>
+        /* STRICT LAYOUT REQUIREMENTS */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #222; /* Dark background for empty space */
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Alata', sans-serif;
+            user-select: none;
+        }
+
+        /* Main Game Container */
+        #gameWrapper {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8); /* Strong shadow to pop against dark bg */
+            border-radius: 12px;
+            overflow: hidden;
+            border: 4px solid #fff;
+            background-color: #87CEEB; /* Sky Blue internal background */
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* UI Overlay Layers */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(255, 255, 255, 0.4);
+            transition: opacity 0.3s;
+            pointer-events: auto;
+            z-index: 20;
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Typography & Buttons */
+        h1 {
+            font-size: 80px;
+            color: #FF5722;
+            text-shadow: 4px 4px 0 #FFFFFF;
+            margin: 0 0 20px 0;
+            animation: bounce 2s infinite;
+            text-align: center;
+        }
+
+        h2 {
+            font-size: 50px;
+            color: #333;
+            text-shadow: 2px 2px 0 #FFF;
+            margin: 0 0 10px 0;
+        }
+
+        p {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 30px;
+            font-weight: bold;
+        }
+
+        .btn {
+            background: linear-gradient(to bottom, #4CAF50, #45a049);
+            color: white;
+            font-family: 'Alata', sans-serif;
+            font-size: 36px;
+            padding: 20px 60px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #2E7D32, 0 10px 10px rgba(0,0,0,0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .btn:active {
+            transform: translateY(6px);
+            box-shadow: 0 0 0 #2E7D32, inset 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .btn:hover {
+            background: linear-gradient(to bottom, #66BB6A, #4CAF50);
+        }
+
+        /* HUD Score - Positioned lower as requested */
+        #scoreHud {
+            position: absolute;
+            top: 15%; /* Safe distance from top (15%) */
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 90px;
+            color: white;
+            text-shadow: 4px 4px 0 rgba(0,0,0,0.3);
+            pointer-events: none;
+            display: none; /* Hidden on start screen */
+            z-index: 10;
+        }
+
+        /* Animations */
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="gameWrapper">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <!-- HUD -->
+    <div id="scoreHud">0</div>
+
+    <!-- Start Screen -->
+    <div id="startScreen" class="screen">
+        <h1>Super /a/ Jump!</h1>
+        <p>Press Spacebar or Click to Fly</p>
+        <button class="btn" onclick="startGame()">PLAY</button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameOverScreen" class="screen hidden">
+        <h2>Oh No!</h2>
+        <p>Score: <span id="finalScore">0</span> | Best: <span id="bestScore">0</span></p>
+        <button class="btn" onclick="resetGame()">PLAY AGAIN</button>
+    </div>
+</div>
+
+<script>
+    /* * Super 'a' Jump! 
+     * Final Relaxed Version: Optimized for Kids
+     * Uses Delta Time for smooth rendering
+     */
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const startScreen = document.getElementById('startScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const scoreHud = document.getElementById('scoreHud');
+    const finalScoreEl = document.getElementById('finalScore');
+    const bestScoreEl = document.getElementById('bestScore');
+
+    // --- Audio System ---
+    const sounds = {
+        score: new Audio('a-sound.mp3'),
+        crash: new Audio('ohoh-sound.mp3')
+    };
+
+    // Preload audio
+    for(let key in sounds) {
+        sounds[key].volume = 0.5;
+        sounds[key].preload = 'auto';
+    }
+
+    function playSound(name) {
+        try {
+            const s = sounds[name].cloneNode();
+            s.volume = 0.5;
+            s.play().catch(() => {});
+        } catch(e) {}
+    }
+
+    // --- Game Configuration (RELAXED PHYSICS) ---
+    // Values are in Pixels Per Second (PPS)
+    const CONFIG = {
+        gravity: 1100,  // Reduced gravity for a gentle fall (was 2300)
+        jump: -450,     // Gentle upward hop (was -600)
+        speed: 190,     // Slowed down by ~45% (was 350)
+        width: 800,
+        height: 600,
+        groundHeight: 80,
+        spawnRate: 2.4  // Increased time between pipes to maintain gap distance (was 1.3)
+    };
+
+    let state = {
+        current: 'START', // START, PLAYING, GAMEOVER
+        score: 0,
+        highScore: localStorage.getItem('super_a_highscore') || 0,
+        lastTime: 0,
+        spawnTimer: 0
+    };
+
+    // --- Game Objects ---
+
+    const bird = {
+        x: 150,
+        y: 300,
+        radius: 25,
+        hitbox: 20, // Forgiving hitbox size
+        velocity: 0, // Pixels per second
+        
+        draw: function() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            
+            // Rotation based on velocity
+            // Adjusted factor for PPS velocity values
+            let rot = Math.min(Math.PI / 3, Math.max(-Math.PI / 3, (this.velocity * 0.002)));
+            ctx.rotate(rot);
+
+            // Draw shadow for depth
+            ctx.fillStyle = "rgba(0,0,0,0.1)";
+            ctx.font = "bold 60px Alata";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("/a/", 3, 3);
+
+            // Draw Main Character '/a/'
+            ctx.fillStyle = "#FF4081"; // Bright Pink/Red
+            ctx.fillText("/a/", 0, -2); 
+
+            ctx.restore();
+        },
+        
+        update: function(dt) {
+            // Apply Gravity (Velocity += Accel * Time)
+            this.velocity += CONFIG.gravity * dt;
+            // Apply Position (Pos += Vel * Time)
+            this.y += this.velocity * dt;
+
+            // Ground Collision
+            if (this.y + this.hitbox >= CONFIG.height - CONFIG.groundHeight) {
+                this.y = CONFIG.height - CONFIG.groundHeight - this.hitbox;
+                triggerGameOver();
+            }
+
+            // Ceiling Collision
+            if (this.y - this.hitbox <= 0) {
+                this.y = this.hitbox;
+                this.velocity = 0;
+            }
+        },
+        
+        jump: function() {
+            this.velocity = CONFIG.jump;
+        }
+    };
+
+    const pipes = {
+        items: [],
+        w: 80,
+        gap: 180, // Very wide gap for kids
+        
+        draw: function() {
+            this.items.forEach(p => {
+                // Pipe Colors - Cheerful Orange
+                const pipeColor = "#FF9800";
+                const outlineColor = "#F57C00";
+
+                // Top Pipe
+                drawRoundedRect(ctx, p.x, 0, this.w, p.top, 0, pipeColor, outlineColor);
+                // Top Cap
+                drawRoundedRect(ctx, p.x - 5, p.top - 30, this.w + 10, 30, 5, pipeColor, outlineColor);
+
+                // Bottom Pipe
+                let botY = p.top + this.gap;
+                let botH = CONFIG.height - CONFIG.groundHeight - botY;
+                drawRoundedRect(ctx, p.x, botY, this.w, botH, 0, pipeColor, outlineColor);
+                // Bottom Cap
+                drawRoundedRect(ctx, p.x - 5, botY, this.w + 10, 30, 5, pipeColor, outlineColor);
+            });
+        },
+        
+        update: function(dt) {
+            // Spawn Timer
+            state.spawnTimer += dt;
+            if (state.spawnTimer >= CONFIG.spawnRate) {
+                state.spawnTimer = 0;
+                
+                const minPipe = 100;
+                const maxPipe = CONFIG.height - CONFIG.groundHeight - this.gap - 100;
+                const h = Math.floor(Math.random() * (maxPipe - minPipe + 1)) + minPipe;
+                
+                this.items.push({
+                    x: CONFIG.width,
+                    top: h,
+                    passed: false
+                });
+            }
+
+            for(let i = 0; i < this.items.length; i++) {
+                let p = this.items[i];
+                // Move Pipe (Pos -= Speed * Time)
+                p.x -= CONFIG.speed * dt;
+
+                // Collision Detection
+                if (bird.x + bird.hitbox > p.x && bird.x - bird.hitbox < p.x + this.w) {
+                    if (bird.y - bird.hitbox < p.top || bird.y + bird.hitbox > p.top + this.gap) {
+                        triggerGameOver();
+                    }
+                }
+
+                // Score Logic
+                if (p.x + this.w < bird.x && !p.passed) {
+                    state.score++;
+                    scoreHud.innerText = state.score;
+                    p.passed = true;
+                    playSound('score');
+                }
+
+                // Cleanup Offscreen Pipes
+                if (p.x + this.w < -20) {
+                    this.items.shift();
+                    i--;
+                }
+            }
+        }
+    };
+
+    const background = {
+        clouds: [],
+        
+        init: function() {
+            // Generate some random clouds
+            for(let i=0; i<5; i++) {
+                this.clouds.push({
+                    x: Math.random() * CONFIG.width,
+                    y: Math.random() * 300,
+                    size: 0.5 + Math.random() * 0.5,
+                    speed: 20 + Math.random() * 30 // Speed in PPS
+                });
+            }
+        },
+
+        draw: function() {
+            // Sky is handled by CSS background on container, but we can clear canvas
+            ctx.clearRect(0, 0, CONFIG.width, CONFIG.height);
+
+            // Draw Clouds
+            ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+            this.clouds.forEach(c => {
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, 40 * c.size, 0, Math.PI*2);
+                ctx.arc(c.x + 30*c.size, c.y - 15*c.size, 45*c.size, 0, Math.PI*2);
+                ctx.arc(c.x + 60*c.size, c.y, 40*c.size, 0, Math.PI*2);
+                ctx.fill();
+            });
+
+            // Draw Hills (Rolling Background)
+            ctx.fillStyle = "#90EE90"; // Light Green
+            ctx.beginPath();
+            ctx.moveTo(0, CONFIG.height - CONFIG.groundHeight);
+            
+            // Draw a sine wave hill - Animated via Date.now() for simplicity as it's purely decorative
+            const time = Date.now() / 1000; 
+            for (let x = 0; x <= CONFIG.width; x++) {
+                let y = (CONFIG.height - CONFIG.groundHeight - 50) + 
+                        Math.sin((x * 0.01) + (time * 2)) * 20;
+                ctx.lineTo(x, y);
+            }
+            ctx.lineTo(CONFIG.width, CONFIG.height);
+            ctx.lineTo(0, CONFIG.height);
+            ctx.fill();
+
+            // Foreground Ground
+            ctx.fillStyle = "#4CAF50"; // Darker Green
+            ctx.fillRect(0, CONFIG.height - CONFIG.groundHeight, CONFIG.width, CONFIG.groundHeight);
+            
+            // Grass strip
+            ctx.fillStyle = "#66BB6A";
+            ctx.fillRect(0, CONFIG.height - CONFIG.groundHeight, CONFIG.width, 15);
+        },
+
+        update: function(dt) {
+            this.clouds.forEach(c => {
+                c.x -= c.speed * dt;
+                if(c.x < -100) c.x = CONFIG.width + 100;
+            });
+        }
+    };
+
+    // --- Helper Functions ---
+
+    function drawRoundedRect(ctx, x, y, w, h, r, fill, stroke) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 3; ctx.stroke(); }
+    }
+
+    // --- Core Game Logic ---
+
+    function startGame() {
+        // Unlock Audio Context
+        if(sounds.score.context && sounds.score.context.state === 'suspended') {
+            sounds.score.context.resume();
+        }
+
+        // Reset state
+        bird.y = 300;
+        bird.velocity = 0;
+        bird.x = 150; // Ensure position is reset
+        pipes.items = [];
+        state.score = 0;
+        state.spawnTimer = 0;
+        state.current = 'PLAYING';
+        state.lastTime = performance.now(); // Reset timer
+
+        // Update UI
+        scoreHud.innerText = "0";
+        scoreHud.style.display = 'block';
+        startScreen.classList.add('hidden');
+        gameOverScreen.classList.add('hidden');
+
+        bird.jump(); // Initial jump
+    }
+
+    function triggerGameOver() {
+        if (state.current === 'GAMEOVER') return;
+        state.current = 'GAMEOVER';
+        playSound('crash');
+
+        // High Score Logic
+        if (state.score > state.highScore) {
+            state.highScore = state.score;
+            localStorage.setItem('super_a_highscore', state.highScore);
+        }
+
+        // Show UI
+        finalScoreEl.innerText = state.score;
+        bestScoreEl.innerText = state.highScore;
+        scoreHud.style.display = 'none';
+        
+        // Small delay before showing screen so player sees the crash
+        setTimeout(() => {
+            gameOverScreen.classList.remove('hidden');
+        }, 300);
+    }
+
+    function resetGame() {
+        startGame();
+    }
+
+    function inputHandler(e) {
+        // Prevent default behavior for space
+        if (e.type === 'keydown' && e.code === 'Space') e.preventDefault();
+        
+        if (e.type === 'keydown' && e.code !== 'Space') return;
+        
+        if (state.current === 'PLAYING') {
+            bird.jump();
+        } else if (state.current === 'START' && (e.code === 'Space' || e.type === 'mousedown')) {
+            startGame();
+        }
+    }
+
+    // --- Game Loop (Delta Time) ---
+
+    function loop(timestamp) {
+        // Calculate Delta Time (seconds)
+        const dt = (timestamp - state.lastTime) / 1000;
+        state.lastTime = timestamp;
+
+        // Cap dt to prevent massive jumps on lag (e.g., max 0.1s frame)
+        const safeDt = Math.min(dt, 0.1);
+
+        background.draw();
+        
+        if (state.current === 'PLAYING') {
+            background.update(safeDt);
+            pipes.update(safeDt);
+            pipes.draw();
+            bird.update(safeDt);
+            bird.draw();
+        } else if (state.current === 'START') {
+            background.update(safeDt); 
+            // NOTE: Bird is NOT drawn here, per requirements
+        } else if (state.current === 'GAMEOVER') {
+            pipes.draw(); // Static
+            // Bird falls
+            if (bird.y < CONFIG.height - CONFIG.groundHeight - bird.hitbox) {
+                bird.y += 500 * safeDt; // Simple Fall Logic
+                bird.draw();
+            } else {
+                bird.y = CONFIG.height - CONFIG.groundHeight - bird.hitbox;
+                bird.draw();
+            }
+        }
+
+        requestAnimationFrame(loop);
+    }
+
+    // --- Initialization ---
+    
+    background.init();
+    
+    // Inputs
+    window.addEventListener('keydown', inputHandler);
+    // Mouse click on canvas handles jump during game
+    canvas.addEventListener('mousedown', (e) => {
+        if(state.current === 'PLAYING') inputHandler({type: 'mousedown'});
+    });
+
+    // Wait for font
+    document.fonts.ready.then(() => {
+        state.lastTime = performance.now();
+        requestAnimationFrame(loop);
+    });
+
+</script>
+</body>
+</html>

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Theo the Thirsty Thief</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #0f172a; --pink: #fb7185; --green: #4ade80; --gold: #facc15; }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: 'Fredoka One', cursive; background: var(--bg); color: white; }
+        
+        #game-stage { position: relative; width: 100vw; height: 100vh; background: radial-gradient(circle, #1e293b 0%, #0f172a 100%); transition: background 0.1s; }
+
+        /* HUD */
+        #hud { 
+            position: absolute; top: 0; left: 0; width: 100%; 
+            padding: 20px; box-sizing: border-box; 
+            display: flex; justify-content: space-between; align-items: flex-start; z-index: 100; 
+        }
+        .score-box { background: rgba(255,255,255,0.1); padding: 10px 30px; border-radius: 20px; border: 3px solid rgba(255,255,255,0.2); text-align: center; }
+        #score-val { font-size: 75px; display: block; color: var(--green); text-shadow: 0 0 20px rgba(74, 222, 128, 0.5); line-height: 1; }
+        
+        .energy-box { background: rgba(0,0,0,0.4); padding: 15px; border-radius: 15px; min-width: 220px; }
+        #energy-container { width: 100%; height: 20px; background: #334155; border-radius: 10px; overflow: hidden; border: 2px solid white; margin-top: 5px; }
+        #energy-fill { width: 100%; height: 100%; background: var(--green); transition: width 0.2s; }
+
+        /* Milestone Messages */
+        #message-overlay {
+            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) scale(0);
+            font-size: 85px; color: var(--gold); text-shadow: 0 0 30px rgba(250, 204, 21, 0.8);
+            pointer-events: none; z-index: 200; transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            text-align: center; width: 100%;
+        }
+
+        /* Theo */
+        #theo-anchor { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); z-index: 50; }
+        #theo { font-size: 130px; transition: filter 0.4s, transform 0.1s; }
+        .color-green { filter: hue-rotate(0deg) drop-shadow(0 0 15px #4ade80); }
+        .color-blue { filter: hue-rotate(180deg) drop-shadow(0 0 15px #38bdf8); }
+        .color-pink { filter: hue-rotate(300deg) drop-shadow(0 0 15px #fb7185); }
+        .color-purp { filter: hue-rotate(260deg) drop-shadow(0 0 25px #a855f7); }
+
+        /* Tongue & Bugs */
+        #tongue { position: absolute; bottom: 100px; left: 50%; width: 20px; background: #ff4d6d; border-radius: 10px; transform-origin: bottom center; display: none; z-index: 45; }
+        .bug { position: absolute; background: white; color: #1e293b; padding: 15px 30px; border-radius: 60px; cursor: pointer; display: flex; align-items: center; gap: 12px; box-shadow: 0 10px 0 #94a3b8; font-size: 28px; z-index: 60; }
+
+        /* Screens */
+        .overlay { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
+        .btn { background: var(--green); color: white; border: none; padding: 25px 90px; font-size: 50px; border-radius: 70px; cursor: pointer; box-shadow: 0 12px 0 #166534; }
+    </style>
+</head>
+<body>
+
+<div id="game-stage">
+    <div id="hud">
+        <div class="score-box">
+            <span style="font-size: 20px; color: #94a3b8;">SCORE</span>
+            <span id="score-val">0</span>
+        </div>
+        <div class="energy-box">
+            <span style="font-size: 16px;">THEO'S ENERGY</span>
+            <div id="energy-container"><div id="energy-fill"></div></div>
+        </div>
+    </div>
+
+    <div id="message-overlay">GOOD JOB!</div>
+    <div id="tongue"></div>
+    <div id="theo-anchor"><div id="theo" class="color-green">🦎</div></div>
+</div>
+
+<div id="start-screen" class="overlay">
+    <h1 style="font-size: 85px; text-align: center; margin-bottom: 40px;">Theo the<br>Thirsty Thief</h1>
+    <button class="btn" onclick="startGame()">START</button>
+</div>
+
+<div id="game-over" class="overlay" style="display:none;">
+    <h1 style="color: var(--pink); font-size: 90px;">GAME OVER</h1>
+    <h2 id="final-score" style="font-size: 45px; margin-bottom: 30px;">SCORE: 0</h2>
+    <button class="btn" onclick="location.reload()">TRY AGAIN</button>
+</div>
+
+<audio id="snd-correct" src="th-sound.mp3"></audio>
+<audio id="snd-fail" src="ohoh-sound.mp3"></audio>
+
+<script>
+    let score = 0, energy = 100, isLive = false, lastMilestone = 0;
+    const messages = ["GOOD JOB!", "YOU'RE A NATURAL!", "AMAZING!", "TH-EXPERT!", "UNSTOPPABLE!"];
+    const bugPool = [
+        { i: "👍", t: "THUMB", th: true }, { i: "🔢", t: "THREE", th: true },
+        { i: "🦷", t: "TOOTH", th: true }, { i: "⚡", t: "THUNDER", th: true },
+        { i: "🧵", t: "THREAD", th: true }, { i: "🌵", t: "THISTLE", th: true },
+        { i: "🍎", t: "APPLE", th: false }, { i: "🚗", t: "CAR", th: false },
+        { i: "🐱", t: "CAT", th: false }
+    ];
+
+    function startGame() {
+        document.getElementById('start-screen').style.display = 'none';
+        isLive = true;
+        spawnLoop();
+        energyLoop();
+    }
+
+    function energyLoop() {
+        if (!isLive) return;
+        energy -= 0.5;
+        document.getElementById('energy-fill').style.width = energy + "%";
+        if (energy <= 0) endGame();
+        else setTimeout(energyLoop, 150);
+    }
+
+    function spawnLoop() {
+        if (!isLive) return;
+        createBug();
+        setTimeout(spawnLoop, Math.max(1200, 3000 - (score * 6)));
+    }
+
+    function createBug() {
+        const data = bugPool[Math.floor(Math.random() * bugPool.length)];
+        const el = document.createElement('div');
+        el.className = 'bug';
+        el.innerHTML = `<span>${data.i}</span><b>${data.t}</b>`;
+        
+        let side = Math.random() > 0.5 ? -200 : window.innerWidth + 50;
+        el.style.left = side + "px";
+        el.style.top = (Math.random() * 55 + 15) + "vh";
+        document.getElementById('game-stage').appendChild(el);
+
+        el.animate([
+            { left: side + "px" },
+            { left: (side < 0 ? window.innerWidth + 300 : -300) + "px" }
+        ], { duration: 7500 }).onfinish = () => el.remove();
+
+        el.onmousedown = (e) => {
+            if (!isLive) return;
+            const tRect = document.getElementById('theo').getBoundingClientRect();
+            const bRect = el.getBoundingClientRect();
+            const sX = tRect.left + tRect.width/2, sY = tRect.top + 20;
+            const targetX = bRect.left + bRect.width/2, targetY = bRect.top + bRect.height/2;
+            const dist = Math.sqrt(Math.pow(targetX - sX, 2) + Math.pow(targetY - sY, 2));
+            const angle = Math.atan2(targetX - sX, sY - targetY) * (180/Math.PI);
+
+            const t = document.getElementById('tongue');
+            t.style.display = 'block'; t.style.transform = `rotate(${angle}deg)`; t.style.height = dist + "px";
+
+            setTimeout(() => {
+                if (data.th) {
+                    score += 10; energy = Math.min(100, energy + 20);
+                    document.getElementById('snd-correct').currentTime = 0;
+                    document.getElementById('snd-correct').play();
+                    checkMilestone(); updateEvo();
+                } else {
+                    energy -= 20;
+                    // Visually flash red, but NO "ohoh" sound here
+                    document.getElementById('game-stage').style.background = "#450a0a";
+                    setTimeout(() => document.getElementById('game-stage').style.background = "", 100);
+                }
+                document.getElementById('score-val').innerText = score;
+                t.style.height = "0"; setTimeout(() => { t.style.display = 'none'; el.remove(); }, 100);
+            }, 100);
+        };
+    }
+
+    function checkMilestone() {
+        if (score > 0 && score % 30 === 0 && score !== lastMilestone) {
+            lastMilestone = score;
+            const msg = document.getElementById('message-overlay');
+            msg.innerText = messages[Math.floor(Math.random() * messages.length)];
+            msg.style.transform = "translate(-50%, -50%) scale(1)";
+            setTimeout(() => { msg.style.transform = "translate(-50%, -50%) scale(0)"; }, 1500);
+        }
+    }
+
+    function updateEvo() {
+        const t = document.getElementById('theo');
+        if (score >= 90) { t.className = 'color-purp'; t.innerHTML = "👑🦎"; }
+        else if (score >= 60) { t.className = 'color-pink'; }
+        else if (score >= 30) { t.className = 'color-blue'; }
+    }
+
+    function endGame() {
+        isLive = false;
+        // OHOH sound plays ONLY ONCE here when they lose
+        document.getElementById('snd-fail').play();
+        document.getElementById('game-over').style.display = 'flex';
+        document.getElementById('final-score').innerText = "SCORE: " + score;
+    }
+</script>
+</body>
+</html>

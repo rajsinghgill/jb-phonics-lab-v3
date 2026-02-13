@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Road Crossing: The /p/ Sound</title>
+    <!-- Import Fredoka Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            touch-action: none; /* Prevent default touch actions like scrolling */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #2c3e50;
+            font-family: 'Fredoka', sans-serif;
+        }
+
+        #game-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        /* --- UI OVERLAYS --- */
+        .ui-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(1.1); /* Slight zoom out effect when hiding */
+        }
+
+        .visible {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+        }
+
+        /* Start Screen Specifics */
+        #start-screen {
+            background: linear-gradient(135deg, #FF9A9E 0%, #FECFEF 99%, #FECFEF 100%);
+        }
+        
+        /* Win/Lose Screen Specifics */
+        .overlay-bg {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+        }
+
+        h1 {
+            font-size: clamp(3rem, 8vw, 5rem);
+            color: #fff;
+            margin: 0 0 10px 0;
+            text-shadow: 4px 4px 0px rgba(0,0,0,0.2);
+            text-align: center;
+            line-height: 1.1;
+        }
+
+        p.subtitle {
+            font-size: clamp(1.2rem, 4vw, 2rem);
+            color: #fff;
+            margin-bottom: 40px;
+            text-align: center;
+            text-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+            max-width: 80%;
+        }
+
+        .btn {
+            background-color: #4CAF50; /* Green */
+            color: white;
+            padding: 15px 50px;
+            font-size: clamp(1.5rem, 5vw, 2.5rem);
+            border: none;
+            border-radius: 60px;
+            cursor: pointer;
+            font-family: 'Fredoka', sans-serif;
+            font-weight: 600;
+            box-shadow: 0 6px 0 #388E3C, 0 10px 10px rgba(0,0,0,0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+
+        .btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #388E3C, 0 4px 4px rgba(0,0,0,0.2);
+        }
+
+        .btn-red {
+            background-color: #FF5252;
+            box-shadow: 0 6px 0 #D32F2F, 0 10px 10px rgba(0,0,0,0.2);
+        }
+        .btn-red:active {
+            box-shadow: 0 2px 0 #D32F2F, 0 4px 4px rgba(0,0,0,0.2);
+        }
+
+        .btn-blue {
+            background-color: #448AFF;
+            box-shadow: 0 6px 0 #1976D2, 0 10px 10px rgba(0,0,0,0.2);
+        }
+        .btn-blue:active {
+            box-shadow: 0 2px 0 #1976D2, 0 4px 4px rgba(0,0,0,0.2);
+        }
+
+        /* Tutorial/Hint Text */
+        #hint-text {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.2rem;
+            text-shadow: 1px 1px 2px black;
+            pointer-events: none;
+            z-index: 5;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
+            40% {transform: translateY(-10px);}
+            60% {transform: translateY(-5px);}
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HINT -->
+    <div id="hint-text" class="hidden">Tap or Press Space to Jump!</div>
+
+    <!-- START SCREEN -->
+    <div id="start-screen" class="ui-screen visible">
+        <h1>Cross the Road</h1>
+        <p class="subtitle">Get to the <strong>/p/</strong> sound!</p>
+        <button id="btn-start" class="btn">Play</button>
+    </div>
+
+    <!-- WIN SCREEN -->
+    <div id="win-screen" class="ui-screen overlay-bg hidden">
+        <h1>Great Job!</h1>
+        <p class="subtitle">You found the <strong>/p/</strong> sound!</p>
+        <button id="btn-replay" class="btn btn-blue">Play Again</button>
+    </div>
+
+    <!-- LOSE SCREEN -->
+    <div id="lose-screen" class="ui-screen overlay-bg hidden">
+        <h1>Oh no!</h1>
+        <p class="subtitle">Watch out for cars!</p>
+        <button id="btn-retry" class="btn btn-red">Try Again</button>
+    </div>
+</div>
+
+<script>
+    // --- GAME CONFIGURATION ---
+    const ROWS = 10; 
+    
+    // Grid Map (Top to Bottom)
+    // 0: Goal
+    // 1-2: Road 3 (Fast)
+    // 3: Grass 2 (Checkpoint)
+    // 4-5: Road 2 (Medium)
+    // 6: Grass 1 (Checkpoint)
+    // 7-8: Road 1 (Slow)
+    // 9: Start
+    
+    const TYPE_GOAL = 'goal';
+    const TYPE_GRASS = 'grass';
+    const TYPE_ROAD = 'road';
+    const TYPE_START = 'start';
+
+    const ROW_TYPES = [
+        TYPE_GOAL, 
+        TYPE_ROAD, TYPE_ROAD, 
+        TYPE_GRASS, 
+        TYPE_ROAD, TYPE_ROAD, 
+        TYPE_GRASS, 
+        TYPE_ROAD, TYPE_ROAD, 
+        TYPE_START
+    ];
+
+    // Colors
+    const COLORS = {
+        grass: '#A2D149', // Bright pastel green
+        grassDark: '#94C042', // Checkerboard pattern
+        road: '#546E7A', // Blue-grey asphalt
+        roadLine: '#78909C', 
+        goal: '#FFD54F', // Pastel Gold
+        start: '#AED581'
+    };
+
+    // --- ASSETS ---
+    const playerImg = new Image();
+    playerImg.src = 'cross-the-road-character.png';
+    let playerImgLoaded = false;
+    playerImg.onload = () => { playerImgLoaded = true; };
+
+    const audioP = new Audio('p-sound.mp3');
+    const audioOhoh = new Audio('ohoh-sound.mp3');
+    const audioBg = new Audio('traffic-noise.mp3');
+    
+    // Configure Background Audio
+    audioBg.loop = true;
+    audioBg.volume = 0.2; // 20% volume as requested
+
+    function unlockAudio() {
+        // Unlock sound contexts on user interaction
+        audioP.play().catch(() => {});
+        audioP.pause();
+        audioP.currentTime = 0;
+        
+        audioOhoh.play().catch(() => {});
+        audioOhoh.pause();
+        audioOhoh.currentTime = 0;
+
+        // Start background noise
+        audioBg.play().catch(e => console.log("Bg Audio fail:", e));
+    }
+
+    function playSound(type) {
+        // Note: We do NOT stop audioBg here, it runs continuously
+        
+        // Stop SFX to prevent overlap mess
+        audioP.pause(); audioP.currentTime = 0;
+        audioOhoh.pause(); audioOhoh.currentTime = 0;
+
+        if (type === 'p') {
+            audioP.play().catch(e => console.warn(e));
+        } else if (type === 'ohoh') {
+            audioOhoh.play().catch(e => console.warn(e));
+        }
+    }
+
+    // --- GAME STATE ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const screens = {
+        start: document.getElementById('start-screen'),
+        win: document.getElementById('win-screen'),
+        lose: document.getElementById('lose-screen'),
+        hint: document.getElementById('hint-text')
+    };
+
+    let gameState = 'START'; // START, PLAYING, WIN, LOSE
+    let lastTime = 0;
+    
+    // Dimensions
+    let width, height, rowHeight, playerSize, carSize;
+
+    // Entities
+    let player = {
+        r: 9, // Start at bottom row (index 9)
+        y: 0, // Visual Y position
+        targetR: 9,
+        jumpProgress: 0,
+        isJumping: false
+    };
+
+    let cars = [];
+    let floatingEffects = []; // Array for visual feedback bubbles
+
+    // --- CORE LOGIC ---
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+
+        rowHeight = height / ROWS;
+        // Make player slightly smaller than row for clearance
+        playerSize = Math.min(rowHeight * 0.8, width * 0.15); 
+        carSize = rowHeight * 0.7;
+        
+        // Update visual position immediately if not jumping
+        if (!player.isJumping) {
+            player.y = getRowY(player.r);
+        }
+    }
+
+    window.addEventListener('resize', resize);
+
+    function initGame() {
+        player.r = 9;
+        player.targetR = 9;
+        player.isJumping = false;
+        player.jumpProgress = 0;
+        player.y = getRowY(9);
+        
+        cars = [];
+        floatingEffects = []; // Clear old effects
+        spawnCars();
+    }
+
+    function spawnCars() {
+        cars = [];
+        
+        const createCar = (row, speed, type, offset) => {
+            cars.push({
+                r: row,
+                x: offset, // 0.0 to 1.0
+                speed: speed, // screen width per second
+                type: type // Emoji
+            });
+        };
+
+        // Road 1 (Rows 7, 8) - Slow
+        // Row 8: Right
+        createCar(8, 0.15, '🚙', 0.2);
+        createCar(8, 0.15, '🚙', 0.6);
+        // Row 7: Right
+        createCar(7, 0.2, '🚗', 0.4);
+        createCar(7, 0.2, '🚗', 0.9);
+
+        // Road 2 (Rows 4, 5) - Medium, Opposite directions
+        // Row 5: Left
+        createCar(5, -0.25, '🚕', 0.1);
+        createCar(5, -0.25, '🚕', 0.5);
+        createCar(5, -0.25, '🚕', 0.9);
+        // Row 4: Right
+        createCar(4, 0.3, '🚑', 0.3);
+        createCar(4, 0.3, '🚑', 0.8);
+
+        // Road 3 (Rows 1, 2) - Fast
+        // Row 2: Left
+        createCar(2, -0.4, '🏎️', 0.2);
+        createCar(2, -0.4, '🏎️', 0.7);
+        // Row 1: Left
+        createCar(1, -0.5, '🚓', 0.5);
+        createCar(1, -0.5, '🚓', 0.9);
+    }
+
+    function changeState(newState) {
+        gameState = newState;
+        
+        // Hide all screens
+        Object.values(screens).forEach(s => {
+            s.classList.remove('visible');
+            s.classList.add('hidden');
+        });
+
+        if (newState === 'START') {
+            screens.start.classList.remove('hidden');
+            screens.start.classList.add('visible');
+        } else if (newState === 'PLAYING') {
+            screens.hint.classList.remove('hidden');
+            screens.hint.classList.add('visible');
+        } else if (newState === 'WIN') {
+            screens.win.classList.remove('hidden');
+            screens.win.classList.add('visible');
+        } else if (newState === 'LOSE') {
+            screens.lose.classList.remove('hidden');
+            screens.lose.classList.add('visible');
+        }
+    }
+
+    function jump() {
+        if (gameState !== 'PLAYING') return;
+        if (player.isJumping) return;
+
+        player.isJumping = true;
+        player.targetR = Math.max(0, player.r - 1);
+    }
+
+    function checkCollision() {
+        if (player.isJumping) return; // Invincible mid-air
+        
+        // Check Cars
+        if (ROW_TYPES[player.r] === TYPE_ROAD) {
+            const py = getRowY(player.r);
+            const px = width / 2;
+            const hitRadius = (playerSize + carSize) * 0.35; // Forgiving hitbox
+
+            for (let car of cars) {
+                if (car.r === player.r) {
+                    const cx = car.x * width;
+                    const dist = Math.abs(px - cx);
+                    if (dist < hitRadius) {
+                        handleCrash();
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    function handleCrash() {
+        playSound('ohoh');
+        changeState('LOSE');
+    }
+
+    function handleLand() {
+        const type = ROW_TYPES[player.r];
+        
+        // Checkpoint / Safe Zone Logic
+        if (type === TYPE_GRASS || type === TYPE_GOAL) {
+            playSound('p');
+            // Spawn visual effect
+            spawnFloatingText(width / 2, getRowY(player.r) - playerSize, "/p/");
+        }
+
+        if (type === TYPE_GOAL) {
+            changeState('WIN');
+        }
+    }
+
+    function spawnFloatingText(x, y, text) {
+        floatingEffects.push({
+            x: x,
+            y: y,
+            text: text,
+            life: 1.0, // 1 second lifespan
+            scale: 0
+        });
+    }
+
+    function update(dt) {
+        if (gameState !== 'PLAYING' && gameState !== 'LOSE') return; 
+        
+        // Move Cars
+        cars.forEach(car => {
+            car.x += car.speed * dt;
+            if (car.speed > 0 && car.x > 1.2) car.x = -0.2;
+            if (car.speed < 0 && car.x < -0.2) car.x = 1.2;
+        });
+
+        // Update Floating Effects
+        for (let i = floatingEffects.length - 1; i >= 0; i--) {
+            let fx = floatingEffects[i];
+            fx.life -= dt;
+            fx.y -= dt * 50; // Float up
+            
+            // Pop in and out scale logic
+            if (fx.life > 0.8) fx.scale += dt * 5; // Grow
+            else if (fx.scale > 1) fx.scale = 1;
+
+            if (fx.life <= 0) {
+                floatingEffects.splice(i, 1);
+            }
+        }
+
+        // Move Player
+        if (gameState === 'PLAYING' && player.isJumping) {
+            player.jumpProgress += dt * 6; // Jump speed
+            
+            if (player.jumpProgress >= 1) {
+                // Landed
+                player.jumpProgress = 0;
+                player.isJumping = false;
+                player.r = player.targetR;
+                player.y = getRowY(player.r);
+                handleLand();
+            } else {
+                // Lerp Y
+                const startY = getRowY(player.r);
+                const endY = getRowY(player.targetR);
+                player.y = startY + (endY - startY) * player.jumpProgress;
+                // Parabola arc
+                const jumpHeight = rowHeight * 0.5;
+                player.y -= Math.sin(player.jumpProgress * Math.PI) * jumpHeight;
+            }
+        }
+
+        if (gameState === 'PLAYING') checkCollision();
+    }
+
+    // --- RENDER HELPERS ---
+    function getRowY(r) {
+        return r * rowHeight + (rowHeight / 2);
+    }
+
+    function drawRoundedRect(x, y, w, h, r, color) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, r);
+        ctx.fill();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, width, height);
+
+        // 1. Draw Background Rows
+        for (let r = 0; r < ROWS; r++) {
+            const y = r * rowHeight;
+            const type = ROW_TYPES[r];
+
+            // Base Color
+            if (type === TYPE_GOAL) ctx.fillStyle = COLORS.goal;
+            else if (type === TYPE_GRASS) ctx.fillStyle = COLORS.grass;
+            else if (type === TYPE_START) ctx.fillStyle = COLORS.start;
+            else ctx.fillStyle = COLORS.road;
+            
+            ctx.fillRect(0, y, width, rowHeight);
+
+            // Details
+            if (type === TYPE_ROAD) {
+                if (r < ROWS - 1 && ROW_TYPES[r+1] === TYPE_ROAD) {
+                    ctx.strokeStyle = COLORS.roadLine;
+                    ctx.lineWidth = 4;
+                    ctx.setLineDash([20, 20]);
+                    ctx.beginPath();
+                    ctx.moveTo(0, y + rowHeight);
+                    ctx.lineTo(width, y + rowHeight);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            } else if (type === TYPE_GRASS || type === TYPE_START) {
+                // Grass texture (checkerboard)
+                ctx.fillStyle = COLORS.grassDark;
+                ctx.globalAlpha = 0.3;
+                const checkSize = rowHeight / 2;
+                for(let cx = 0; cx < width; cx += checkSize * 2) {
+                     ctx.fillRect(cx + (r%2 * checkSize), y, checkSize, checkSize);
+                     ctx.fillRect(cx + checkSize - (r%2 * checkSize), y + checkSize/2, checkSize, checkSize/2);
+                }
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        // 2. Draw Text (Goal)
+        const goalY = getRowY(0);
+        ctx.fillStyle = '#FFF';
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+        ctx.font = `bold ${rowHeight * 0.6}px 'Fredoka', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // Floating effect
+        const bob = Math.sin(Date.now() / 300) * 5;
+        ctx.fillText("/p/", width / 2, goalY + bob);
+        
+        ctx.shadowColor = 'transparent'; // Reset shadow
+
+        // 3. Draw Cars
+        ctx.font = `${carSize}px sans-serif`;
+        cars.forEach(car => {
+            const y = getRowY(car.r);
+            const x = car.x * width;
+            
+            ctx.save();
+            ctx.translate(x, y);
+            // Flip if moving left
+            if (car.speed < 0) ctx.scale(-1, 1);
+            
+            // Draw Emoji
+            ctx.shadowColor = 'rgba(0,0,0,0.4)';
+            ctx.shadowBlur = 10;
+            ctx.fillText(car.type, 0, carSize * 0.15);
+            ctx.restore();
+        });
+
+        // 4. Draw Player
+        const px = width / 2;
+        const py = player.y;
+
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 15;
+        ctx.shadowOffsetY = 5;
+
+        if (playerImgLoaded) {
+            const aspect = playerImg.width / playerImg.height;
+            const drawH = playerSize;
+            const drawW = playerSize * aspect;
+            ctx.drawImage(playerImg, px - drawW/2, py - drawH/2, drawW, drawH);
+        } else {
+            // Fallback cute square
+            drawRoundedRect(px - playerSize/2, py - playerSize/2, playerSize, playerSize, 10, '#FF7043');
+            // Eyes
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.arc(px - 10, py - 5, 5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(px + 10, py - 5, 5, 0, Math.PI*2); ctx.fill();
+        }
+        
+        ctx.shadowColor = 'transparent';
+
+        // 5. Draw Floating Effects (Visual Feedback)
+        floatingEffects.forEach(fx => {
+            ctx.save();
+            ctx.translate(fx.x, fx.y);
+            ctx.scale(fx.scale, fx.scale);
+            
+            ctx.fillStyle = '#FFF';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 3;
+            ctx.font = `bold ${rowHeight * 0.8}px 'Fredoka', sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Text Stroke and Fill for visibility
+            ctx.strokeText(fx.text, 0, 0);
+            ctx.fillText(fx.text, 0, 0);
+            
+            ctx.restore();
+        });
+    }
+
+    function loop(timestamp) {
+        const dt = Math.min((timestamp - lastTime) / 1000, 0.1); // Cap dt
+        lastTime = timestamp;
+
+        update(dt);
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    // --- INPUT & EVENTS ---
+    
+    // Separate handler for Touch/Mouse so we don't block button clicks
+    function onTouchAction(e) {
+        if (e.target.tagName === 'BUTTON') return; 
+        
+        if (gameState === 'PLAYING') {
+            e.preventDefault();
+            jump();
+        }
+    }
+
+    // Keydown handler specific for Spacebar
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+            // CRITICAL FIX: Prevent default behavior (scrolling OR button clicking)
+            e.preventDefault(); 
+            if (gameState === 'PLAYING') {
+                jump();
+            }
+        }
+    });
+
+    window.addEventListener('touchstart', onTouchAction, {passive: false});
+    window.addEventListener('mousedown', onTouchAction);
+
+    // Button Listeners - Added .blur() to prevent focus sticking
+    document.getElementById('btn-start').addEventListener('click', (e) => {
+        e.target.blur(); // Remove focus from button
+        unlockAudio();
+        resize();
+        initGame();
+        changeState('PLAYING');
+    });
+
+    document.getElementById('btn-retry').addEventListener('click', (e) => {
+        e.target.blur(); // Remove focus from button
+        initGame();
+        changeState('PLAYING');
+    });
+
+    document.getElementById('btn-replay').addEventListener('click', (e) => {
+        e.target.blur(); // Remove focus from button
+        initGame();
+        changeState('PLAYING');
+    });
+
+    // Start
+    resize();
+    requestAnimationFrame(loop);
+
+</script>
+</body>
+
+</html>
