@@ -46,7 +46,6 @@ export default function App() {
   };
 
   const handleLessonSelect = (lessonId: string) => {
-    console.log("Selected Lesson:", lessonId);
     setSelectedLessonId(lessonId);
     setCurrentScreen(AppScreen.LESSON);
   };
@@ -56,7 +55,6 @@ export default function App() {
   };
 
   const handleGameSelect = (gameId: string) => {
-    console.log("Selected Game:", gameId);
     setSelectedGameId(gameId);
     setCurrentScreen(AppScreen.GAME);
   };
@@ -70,12 +68,10 @@ export default function App() {
 
   // Dashboard Assets Bundle
   const dashboardAssets = {
-    bgSimple: getAssetUrl(ASSET_PATHS.BACKGROUND),
-    logo: getAssetUrl(ASSET_PATHS.LOGO),
-    cardYoungReaders:
-      "https://github.com/rajsinghgill/jb-phonics-lab/blob/main/card-young-readers.png?raw=true",
-    cardPhonicsLab:
-      "https://github.com/rajsinghgill/jb-phonics-lab/blob/main/card-phonics-lab.png?raw=true",
+    bgSimple: getAssetUrl(ASSET_PATHS.CORE.BACKGROUND),
+    logo: getAssetUrl(ASSET_PATHS.CORE.LOGO),
+    cardYoungReaders: getAssetUrl(ASSET_PATHS.CARDS.YOUNG_READERS),
+    cardPhonicsLab: getAssetUrl(ASSET_PATHS.CARDS.PHONICS_LAB),
   };
 
   // --- RENDER ---
@@ -85,23 +81,24 @@ export default function App() {
       <div
         className="jb-background-tint"
         style={{
-          backgroundImage: `url(${getAssetUrl(ASSET_PATHS.BACKGROUND)})`,
+          backgroundImage: `url(${getAssetUrl(ASSET_PATHS.CORE.BACKGROUND)})`,
         }}
       />
 
       <div className="relative z-10 pb-12">
-        {" "}
-        {/* Increased padding bottom to account for larger banner */}
         {/* LOGIN SCREEN */}
         {currentScreen === AppScreen.LOGIN && (
           <StudentLogin
             onLogin={handleLogin}
             assets={{
-              bgSimple: getAssetUrl(ASSET_PATHS.BACKGROUND),
-              logo: getAssetUrl(ASSET_PATHS.LOGO),
+              bgSimple: getAssetUrl(ASSET_PATHS.CORE.BACKGROUND),
+              logo: getAssetUrl(ASSET_PATHS.CORE.LOGO),
+              // Using login-hero-square because hero-girl-vector is missing
+              heroImage: getAssetUrl(ASSET_PATHS.CORE.LOGIN_HERO),
             }}
           />
         )}
+
         {/* DASHBOARD */}
         {currentScreen === AppScreen.DASHBOARD && (
           <DashboardMenu
@@ -114,6 +111,7 @@ export default function App() {
             assets={dashboardAssets}
           />
         )}
+
         {/* LEVEL SELECTION */}
         {currentScreen === AppScreen.LEVELS && (
           <LevelSelectionScreen
@@ -124,7 +122,8 @@ export default function App() {
             userName={userName}
           />
         )}
-        {/* ALL GAMES SCREEN (THE MENU) */}
+
+        {/* ALL GAMES SCREEN */}
         {currentScreen === AppScreen.ALL_GAMES && (
           <AllGamesScreen
             onBack={() => setCurrentScreen(AppScreen.DASHBOARD)}
@@ -133,7 +132,8 @@ export default function App() {
             userName={userName}
           />
         )}
-        {/* GAME PLAYER SCREEN (THE ACTUAL GAME) */}
+
+        {/* GAME PLAYER SCREEN */}
         {currentScreen === AppScreen.GAME && activeGame && (
           <GamePlayerScreen
             title={activeGame.title}
@@ -143,6 +143,7 @@ export default function App() {
             userName={userName}
           />
         )}
+
         {/* SPECIFIC LESSON PLAYERS */}
         {currentScreen === AppScreen.LESSON && (
           <>
@@ -180,7 +181,7 @@ export default function App() {
         )}
       </div>
 
-      {/* --- BETA DISCLAIMER BANNER (BIGGER TEXT) --- */}
+      {/* BETA DISCLAIMER BANNER */}
       <div className="fixed bottom-0 left-0 w-full bg-yellow-300/95 text-yellow-900 text-center text-sm md:text-base py-2 px-4 font-bold z-[100] border-t border-yellow-400 backdrop-blur-sm shadow-lg">
         JB Phonics Lab is currently in beta. This version is under development
         and intended for testing purposes only. Features and stability are
