@@ -1,0 +1,42 @@
+@import url("https://fonts.googleapis.com/css2?family=Varela+Round&family=Nunito:wght@400;600;700;800&display=swap");
+
+/* Global Defaults */
+body {
+  font-family: "Nunito", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* OVERRIDE TAILWIND DEFAULTS */
+.font-sans {
+  font-family: "Nunito", sans-serif !important;
+}
+
+/* Heading Styles */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-header {
+  font-family: "Varela Round", sans-serif !important;
+}
+
+/* Body Helper */
+.font-body {
+  font-family: "Nunito", sans-serif !important;
+}
+
+/* Custom Background Tint */
+.jb-background-tint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  opacity: 0.6; /* Adjust this to make it lighter/darker */
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
